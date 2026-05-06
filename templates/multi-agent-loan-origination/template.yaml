@@ -5,13 +5,13 @@ metadata:
   title: Multi-Agent Loan Origination System
   description: >
     Deploy a multi-agent AI loan origination system on OpenShift.
-    Creates a GitOps repo with Helm values and ArgoCD configuration,
-    forks the application source, wires Tekton CI, and registers
-    everything in the Backstage catalog with K8s, CI, and CD tab visibility.
+    Forks the upstream application source, creates a GitOps repo with
+    custom Helm values and ArgoCD configuration, wires Tekton CI, and
+    registers everything in the Backstage catalog with K8s, CI, and CD tabs.
   tags:
     - ai
     - multi-agent
-    - langraph
+    - langgraph
     - openshift
     - helm
     - tekton
@@ -118,7 +118,7 @@ spec:
           description: >
             OpenShift cluster apps domain (e.g. apps.ocp.example.com).
             Used for Routes and webhook URLs.
-          default: apps.ocp.example.com
+          default: apps.ocp.v7hjl.sandbox2288.opentlc.com
         imageRegistry:
           title: Image Registry
           type: string
@@ -142,7 +142,7 @@ spec:
             allowedHosts:
               - github.com
             allowedOwners:
-              - <GITHUB_ORG>
+              - rrbanda
         enableKeycloak:
           title: Enable Keycloak (OIDC auth)
           type: boolean
@@ -165,9 +165,17 @@ spec:
           default: false
 
   steps:
-    # ── Step 1: Generate app repo content (catalog-info.yaml) ─────────
-    - id: generateSource
-      name: Generate Application Catalog Entry
+    # ── Step 1: Fetch the upstream application source ─────────────────
+    - id: fetchUpstream
+      name: Fetch Upstream Application Source
+      action: fetch:plain
+      input:
+        url: https://github.com/rrbanda/multi-agent-loan-origination/tree/main
+        targetPath: ./source
+
+    # ── Step 2: Overlay catalog-info.yaml onto the source ─────────────
+    - id: overlayCatalog
+      name: Add Backstage Catalog Entry
       action: fetch:template
       input:
         url: ./skeleton
@@ -180,7 +188,7 @@ spec:
           clusterDomain: ${{ parameters.clusterDomain }}
           destination: ${{ parameters.repoUrl | parseRepoUrl }}
 
-    # ── Step 2: Publish the application source repo ───────────────────
+    # ── Step 3: Publish the application source repo ───────────────────
     - id: publishSource
       name: Create Application Repository
       action: publish:github
@@ -192,7 +200,7 @@ spec:
         repoVisibility: public
         protectDefaultBranch: false
 
-    # ── Step 3: Generate GitOps repo content ──────────────────────────
+    # ── Step 4: Generate GitOps repo content ──────────────────────────
     - id: generateGitOps
       name: Generate GitOps Manifests
       action: fetch:template
@@ -220,8 +228,9 @@ spec:
           enableMLflow: ${{ parameters.enableMLflow }}
           authDisabled: ${{ parameters.authDisabled }}
           destination: ${{ parameters.repoUrl | parseRepoUrl }}
+          sourceRepoUrl: ${{ steps.publishSource.output.remoteUrl }}
 
-    # ── Step 4: Publish the GitOps repo ───────────────────────────────
+    # ── Step 5: Publish the GitOps repo ───────────────────────────────
     - id: publishGitOps
       name: Create GitOps Repository
       action: publish:github
@@ -233,7 +242,7 @@ spec:
         repoVisibility: public
         protectDefaultBranch: false
 
-    # ── Step 5: Wire CI webhook to Tekton EventListener ───────────────
+    # ── Step 6: Wire CI webhook to Tekton EventListener ───────────────
     - id: createWebhook
       name: Configure CI Webhook
       action: github:webhook
@@ -245,7 +254,10 @@ spec:
           - push
         webhookSecret: pac-webhook-shared-secret
 
-    # ── Step 6: Create ArgoCD Application ─────────────────────────────
+    # ── Step 7: Create ArgoCD Application ─────────────────────────────
+    # Points to the Helm chart in the SOURCE repo (deploy/helm/mortgage-ai).
+    # Uses default chart values initially. For custom values from the GitOps
+    # repo, apply the multi-source argocd-app.yaml from the GitOps repo.
     - id: createArgoApp
       name: Create ArgoCD Application
       action: argocd:create-resources
@@ -253,11 +265,11 @@ spec:
         appName: ${{ parameters.name }}
         argoInstance: openshift-gitops
         namespace: ${{ parameters.namespace }}
-        repoUrl: ${{ steps.publishGitOps.output.remoteUrl }}
-        path: manifests
+        repoUrl: ${{ steps.publishSource.output.remoteUrl }}
+        path: deploy/helm/mortgage-ai
         labelValue: ${{ parameters.name }}
 
-    # ── Step 7: Register application component in catalog ─────────────
+    # ── Step 8: Register application component in catalog ─────────────
     - id: registerCatalog
       name: Register Component in Catalog
       action: catalog:register
@@ -265,7 +277,7 @@ spec:
         repoContentsUrl: ${{ steps.publishSource.output.repoContentsUrl }}
         catalogInfoPath: /catalog-info.yaml
 
-    # ── Step 8: Register GitOps resource in catalog ───────────────────
+    # ── Step 9: Register GitOps resource in catalog ───────────────────
     - id: registerGitOps
       name: Register GitOps Resource in Catalog
       action: catalog:register

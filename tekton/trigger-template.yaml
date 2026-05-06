@@ -31,7 +31,7 @@ spec:
           - name: deploy-namespace
             value: loan-origination
           - name: gitops-repo-url
-            value: https://github.com/<GITHUB_ORG>/$(tt.params.repo-name)-gitops.git
+            value: https://github.com/rrbanda/$(tt.params.repo-name)-gitops.git
         workspaces:
           - name: source
             volumeClaimTemplate:

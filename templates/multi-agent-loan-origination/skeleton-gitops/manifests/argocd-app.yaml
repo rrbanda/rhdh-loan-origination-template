@@ -1,3 +1,10 @@
+# Multi-source ArgoCD Application
+# - Chart source: Helm chart from the application repo (deploy/helm/mortgage-ai)
+# - Values source: Custom values.yaml from this GitOps repo
+#
+# Apply with: oc apply -f manifests/argocd-app.yaml
+# This upgrades the basic ArgoCD app created by the template to use
+# custom Helm values from the GitOps repo.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -9,15 +16,18 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    # The Helm chart is embedded in the upstream multi-agent-loan-origination repo.
-    # ArgoCD uses the GitOps repo values.yaml layered on top of the chart defaults.
-    repoURL: https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}-gitops.git
-    targetRevision: main
-    path: .
-    helm:
-      valueFiles:
-        - values.yaml
+  sources:
+    # Source 1: Helm chart from the application repository
+    - repoURL: ${{ values.sourceRepoUrl }}
+      targetRevision: main
+      path: deploy/helm/mortgage-ai
+      helm:
+        valueFiles:
+          - $values/values.yaml
+    # Source 2: Custom values from this GitOps repository
+    - repoURL: https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}-gitops.git
+      targetRevision: main
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: ${{ values.namespace }}

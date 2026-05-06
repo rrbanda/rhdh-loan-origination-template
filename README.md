@@ -1,11 +1,11 @@
 # RHDH Software Template -- Multi-Agent Loan Origination
 
 An RHDH (Red Hat Developer Hub) Software Template that deploys the
-[multi-agent loan origination system](https://github.com/rh-ai-quickstart/multi-agent-loan-origination)
+[multi-agent loan origination system](https://github.com/rrbanda/multi-agent-loan-origination)
 on OpenShift with full GitOps CI/CD. When a developer runs this template it creates:
 
-* An **application repo** with the multi-agent loan origination source code and a Backstage catalog entry
-* A **GitOps repo** with Helm values, ArgoCD Application manifest, and catalog metadata
+* An **application repo** forked from the upstream source with a Backstage catalog entry
+* A **GitOps repo** with custom Helm values, a multi-source ArgoCD Application manifest, and catalog metadata
 * A **Tekton CI pipeline** triggered by GitHub webhooks that builds both API and UI container images
 * An **ArgoCD Application** for continuous deployment via Helm
 * **Backstage catalog entries** with CI (Tekton), CD (ArgoCD), and Kubernetes tabs
@@ -51,7 +51,32 @@ Developer
                                            └───────────────────────┘
 ```
 
-## What the Template Deploys
+## How It Works
+
+1. The template **fetches the full upstream source** from `rrbanda/multi-agent-loan-origination`
+2. It **overlays a `catalog-info.yaml`** with Backstage annotations for K8s/Tekton/ArgoCD tabs
+3. It **publishes** the source to a new GitHub repo under the user's org
+4. It **generates a GitOps repo** containing:
+   - `values.yaml` with Helm overrides customized to user inputs (LLM, namespace, etc.)
+   - A **multi-source ArgoCD Application** manifest (chart from source repo, values from GitOps repo)
+   - A Backstage Resource catalog entry
+5. It **creates an ArgoCD Application** pointing to the Helm chart in the source repo
+6. It **wires a GitHub webhook** to trigger Tekton CI on every push to `main`
+7. It **registers** both repos in the Backstage catalog
+
+### Post-Deploy: Upgrade to Custom Values
+
+The template initially creates an ArgoCD app using default chart values.
+To apply your custom Helm values from the GitOps repo, run:
+
+```bash
+oc apply -f manifests/argocd-app.yaml   # from within the GitOps repo clone
+```
+
+This upgrades the ArgoCD app to a **multi-source** configuration that pulls
+the Helm chart from the source repo and custom values from the GitOps repo.
+
+## What Gets Deployed
 
 | Component        | Description                                          | Port  |
 |------------------|------------------------------------------------------|-------|
@@ -64,15 +89,18 @@ Developer
 
 ## Quick Start
 
-Before using this template, search and replace the following placeholders across the repository:
+The template is pre-configured for:
 
-| Placeholder         | Where                                               | Example Value              |
-|---------------------|-----------------------------------------------------|----------------------------|
-| `<GITHUB_ORG>`      | template.yaml, trigger-template.yaml                | `rrbanda`                  |
-| `<CLUSTER_DOMAIN>`  | (used at runtime via template parameters)           | `apps.ocp.example.com`     |
+- **GitHub org:** `rrbanda`
+- **Cluster domain:** `apps.ocp.v7hjl.sandbox2288.opentlc.com`
+- **RHDH:** `backstage-developer-hub-rhdh-operator.apps.ocp.v7hjl.sandbox2288.opentlc.com`
 
-Then follow the installation guide below to set up the OpenShift cluster
-infrastructure and RHDH configuration.
+To use a different cluster or org, update these locations:
+
+| Value             | Where                                               |
+|-------------------|-----------------------------------------------------|
+| GitHub org        | `template.yaml` (allowedOwners), `trigger-template.yaml` (gitops-repo-url) |
+| Cluster domain    | `template.yaml` (clusterDomain default)             |
 
 ---
 
@@ -180,6 +208,16 @@ oc create secret generic rhdh-secrets \
   -n rhdh-operator
 ```
 
+**How to get `K8S_SA_TOKEN`:**
+
+```bash
+oc create sa backstage-k8s-plugin -n rhdh-operator
+oc create clusterrolebinding backstage-k8s-reader-binding \
+  --clusterrole=backstage-k8s-reader \
+  --serviceaccount=rhdh-operator:backstage-k8s-plugin
+oc create token backstage-k8s-plugin -n rhdh-operator --duration=8760h
+```
+
 ### 2. Add the template to RHDH catalog
 
 Add this entry to your `app-config-rhdh` ConfigMap:
@@ -188,7 +226,7 @@ Add this entry to your `app-config-rhdh` ConfigMap:
 catalog:
   locations:
     - type: url
-      target: https://github.com/<GITHUB_ORG>/rhdh-loan-origination-template/blob/main/location.yaml
+      target: https://github.com/rrbanda/rhdh-loan-origination-template/blob/main/location.yaml
       rules:
         - allow: [Template]
 ```
@@ -245,17 +283,46 @@ plugins:
           - type: config
             instances:
               - name: openshift-gitops
-                url: <ARGOCD_SERVER_URL>
+                url: https://openshift-gitops-server-openshift-gitops.apps.ocp.v7hjl.sandbox2288.opentlc.com
                 token: ${ARGOCD_AUTH_TOKEN}
 
   # ArgoCD backend (CD tab data)
   - package: ./dynamic-plugins/dist/roadiehq-backstage-plugin-argo-cd-backend-dynamic
     disabled: false
+    pluginConfig:
+      argocd:
+        username: ${ARGOCD_USERNAME}
+        password: ${ARGOCD_PASSWORD}
+        appLocatorMethods:
+          - type: config
+            instances:
+              - name: openshift-gitops
+                url: https://openshift-gitops-server-openshift-gitops.apps.ocp.v7hjl.sandbox2288.opentlc.com
+                token: ${ARGOCD_AUTH_TOKEN}
 
   # ArgoCD frontend (CD tab UI)
   - package: oci://ghcr.io/redhat-developer/rhdh-plugin-export-overlays/backstage-community-plugin-argocd:bs_1.45.3__2.4.3
     disabled: false
 ```
+
+### 4. Verify available scaffolder actions
+
+Visit your RHDH instance to confirm the required actions are installed:
+
+```
+https://backstage-developer-hub-rhdh-operator.apps.ocp.v7hjl.sandbox2288.opentlc.com/create/actions
+```
+
+Look for:
+- `fetch:plain`
+- `fetch:template`
+- `publish:github`
+- `github:webhook`
+- `argocd:create-resources`
+- `catalog:register`
+
+If `publish:github` or `github:webhook` is missing, enable the GitHub scaffolder plugin.
+If `argocd:create-resources` is missing, enable the Roadie ArgoCD scaffolder plugin.
 
 ---
 
@@ -285,18 +352,18 @@ The template presents a three-page form:
 
 ### Page 3: Deployment Configuration
 
-| Parameter         | Required | Description                        | Default              |
-|-------------------|----------|------------------------------------|----------------------|
-| `namespace`       | No       | OpenShift namespace                | loan-origination     |
-| `clusterDomain`   | No       | Cluster apps domain                | apps.ocp.example.com |
-| `imageRegistry`   | No       | Container image registry           | quay.io              |
-| `imageRepository` | No       | Registry namespace                 | rh-ai-quickstart     |
-| `imageTag`        | No       | Image tag                          | latest               |
-| `repoUrl`         | Yes      | GitHub repo location (picker)      | --                   |
-| `enableKeycloak`  | No       | Deploy Keycloak                    | true                 |
-| `enableSeedData`  | No       | Run seed job                       | false                |
-| `enableMLflow`    | No       | MLflow RBAC resources              | false                |
-| `authDisabled`    | No       | Skip auth for dev                  | false                |
+| Parameter         | Required | Description                        | Default                                        |
+|-------------------|----------|------------------------------------|-------------------------------------------------|
+| `namespace`       | No       | OpenShift namespace                | loan-origination                                |
+| `clusterDomain`   | No       | Cluster apps domain                | apps.ocp.v7hjl.sandbox2288.opentlc.com         |
+| `imageRegistry`   | No       | Container image registry           | quay.io                                         |
+| `imageRepository` | No       | Registry namespace                 | rh-ai-quickstart                                |
+| `imageTag`        | No       | Image tag                          | latest                                          |
+| `repoUrl`         | Yes      | GitHub repo location (picker)      | --                                              |
+| `enableKeycloak`  | No       | Deploy Keycloak                    | true                                            |
+| `enableSeedData`  | No       | Run seed job                       | false                                           |
+| `enableMLflow`    | No       | MLflow RBAC resources              | false                                           |
+| `authDisabled`    | No       | Skip auth for dev                  | false                                           |
 
 ---
 
@@ -319,13 +386,34 @@ Update these locations:
 
 ### Adding optional components
 
-To enable LlamaStack, NeMo Guardrails, or Kagenti, add overrides to
-`skeleton-gitops/values.yaml` or provide a `values.local.yaml` overlay
-in the GitOps repo after scaffolding.
+To enable LlamaStack, NeMo Guardrails, or Kagenti, edit the `values.yaml`
+in the GitOps repo after scaffolding and set the corresponding
+`enabled: true` flags.
 
 ---
 
 ## Troubleshooting
+
+### Template fails at "Fetch Upstream Application Source"
+
+The `fetch:plain` action downloads the upstream repo content. Verify that
+your RHDH instance can reach `https://github.com` and that the GitHub
+integration is configured with a valid token.
+
+### Template fails at "Create Application Repository"
+
+Ensure `backstage-plugin-scaffolder-backend-module-github-dynamic` is
+enabled. The GitHub token needs `repo` and `admin:repo_hook` scopes.
+
+### Template fails at "Create ArgoCD Application"
+
+The `argocd:create-resources` action requires the
+`roadiehq-scaffolder-backend-argocd-dynamic` plugin. Check scaffolder logs:
+
+```bash
+oc logs deploy/backstage-developer-hub -n rhdh-operator -c backstage-backend \
+  | grep "actions enabled"
+```
 
 ### CI tab is blank
 
@@ -339,16 +427,6 @@ in the GitOps repo after scaffolding.
 * Verify the Component has annotation `argocd/app-name: <component-name>`
 * Verify the ArgoCD plugin is configured with the correct instance URL and token
 * Verify the ArgoCD Application exists in `openshift-gitops` namespace
-
-### Template fails at "Create ArgoCD Application"
-
-The `argocd:create-resources` action requires the
-`roadiehq-scaffolder-backend-argocd-dynamic` plugin. Check scaffolder logs:
-
-```bash
-oc logs deploy/backstage-developer-hub -n rhdh-operator -c backstage-backend \
-  | grep "actions enabled"
-```
 
 ### Build fails due to disk space
 
@@ -372,20 +450,20 @@ rhdh-loan-origination-template/
 │   └── event-listener.yaml                      # GitHub webhook receiver
 └── templates/
     └── multi-agent-loan-origination/
-        ├── template.yaml                        # RHDH scaffolder template
+        ├── template.yaml                        # RHDH scaffolder template (9 steps)
         ├── skeleton/
         │   └── catalog-info.yaml                # Backstage Component + API entity
         └── skeleton-gitops/
             ├── catalog-info.yaml                # Backstage Resource entity
             ├── values.yaml                      # Templated Helm values
             └── manifests/
-                ├── argocd-app.yaml              # ArgoCD Application
+                ├── argocd-app.yaml              # Multi-source ArgoCD Application
                 └── namespace.yaml               # Target namespace
 ```
 
 ## Related
 
-* [multi-agent-loan-origination](https://github.com/rh-ai-quickstart/multi-agent-loan-origination) -- Application source
+* [multi-agent-loan-origination](https://github.com/rrbanda/multi-agent-loan-origination) -- Application source
 * [rhdh-mcp-template](https://github.com/rrbanda/rhdh-mcp-template) -- Simpler template for FastMCP servers
 * [Build your first Software Template for Backstage](https://developers.redhat.com/articles/2025/08/12/build-your-first-software-template-backstage) -- Tutorial
 * [Backstage Software Templates docs](https://backstage.io/docs/features/software-templates/writing-templates)
