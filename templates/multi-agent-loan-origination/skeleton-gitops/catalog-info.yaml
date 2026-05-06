@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.name }}-gitops
+  description: GitOps manifests for ${{ values.name }}
+  annotations:
+    github.com/project-slug: ${{ values.destination.owner + "/" + values.destination.repo + "-gitops" }}
+    argocd/app-name: ${{ values.name }}
+spec:
+  type: gitops
+  lifecycle: production
+  owner: ${{ values.owner }}
+  dependsOn:
+    - component:default/${{ values.name }}

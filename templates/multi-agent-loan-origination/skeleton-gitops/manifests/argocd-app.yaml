@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${{ values.name }}
+  namespace: openshift-gitops
+  labels:
+    backstage.io/kubernetes-id: ${{ values.name }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # The Helm chart is embedded in the upstream multi-agent-loan-origination repo.
+    # ArgoCD uses the GitOps repo values.yaml layered on top of the chart defaults.
+    repoURL: https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}-gitops.git
+    targetRevision: main
+    path: .
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${{ values.namespace }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

@@ -1,0 +1,172 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: loan-origination-ci
+  namespace: loan-origination
+spec:
+  description: >
+    CI pipeline for the multi-agent loan origination system.
+    Clones the monorepo, builds two container images (API + UI),
+    then updates the GitOps repo with the new image tags.
+  params:
+    - name: git-url
+      type: string
+      description: HTTPS clone URL of the application repository.
+    - name: git-revision
+      type: string
+      default: main
+    - name: repo-name
+      type: string
+      description: Repository name (used for image naming and labels).
+    - name: deploy-namespace
+      type: string
+      default: loan-origination
+    - name: gitops-repo-url
+      type: string
+      description: HTTPS URL of the GitOps repository.
+
+  tasks:
+    # ── Clone application source ──────────────────────────────────────
+    - name: clone
+      params:
+        - name: URL
+          value: $(params.git-url)
+        - name: REVISION
+          value: $(params.git-revision)
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: source
+
+    # ── Build + push API image ────────────────────────────────────────
+    - name: build-api
+      runAfter: [clone]
+      params:
+        - name: IMAGE
+          value: >-
+            image-registry.openshift-image-registry.svc:5000/$(params.deploy-namespace)/mortgage-ai-api:$(tasks.clone.results.COMMIT)
+        - name: DOCKERFILE
+          value: packages/api/Containerfile
+        - name: CONTEXT
+          value: .
+        - name: TLS_VERIFY
+          value: "false"
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: source
+          workspace: source
+
+    # ── Build + push UI image ─────────────────────────────────────────
+    - name: build-ui
+      runAfter: [clone]
+      params:
+        - name: IMAGE
+          value: >-
+            image-registry.openshift-image-registry.svc:5000/$(params.deploy-namespace)/mortgage-ai-ui:$(tasks.clone.results.COMMIT)
+        - name: DOCKERFILE
+          value: packages/ui/Containerfile
+        - name: CONTEXT
+          value: .
+        - name: TLS_VERIFY
+          value: "false"
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: source
+          workspace: source
+
+    # ── Clone GitOps repo ─────────────────────────────────────────────
+    - name: clone-gitops
+      runAfter: [build-api, build-ui]
+      params:
+        - name: URL
+          value: $(params.gitops-repo-url)
+        - name: REVISION
+          value: main
+        - name: DEPTH
+          value: "0"
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: gitops
+        - name: basic-auth
+          workspace: git-credentials
+
+    # ── Update image tags in GitOps repo and push ─────────────────────
+    - name: push-gitops
+      runAfter: [clone-gitops]
+      params:
+        - name: GIT_USER_NAME
+          value: Tekton CI
+        - name: GIT_USER_EMAIL
+          value: tekton-ci@openshift.local
+        - name: DELETE_EXISTING
+          value: "false"
+        - name: GIT_SCRIPT
+          value: |
+            COMMIT_SHA="$(tasks.clone.results.COMMIT)"
+            API_IMAGE="image-registry.openshift-image-registry.svc:5000/$(params.deploy-namespace)/mortgage-ai-api:${COMMIT_SHA}"
+            UI_IMAGE="image-registry.openshift-image-registry.svc:5000/$(params.deploy-namespace)/mortgage-ai-ui:${COMMIT_SHA}"
+
+            git checkout -b main 2>/dev/null || git checkout main
+
+            # Update the API image tag in values.yaml
+            sed -i "s|imageTag:.*|imageTag: \"${COMMIT_SHA}\"|" values.yaml
+
+            git add -A
+            git diff --cached --quiet && echo "No changes to commit" && exit 0
+            git commit -m "ci: update images to ${COMMIT_SHA:0:8}"
+            git push origin HEAD:main
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-cli
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: source
+          workspace: gitops
+        - name: basic-auth
+          workspace: git-credentials
+
+  workspaces:
+    - name: source
+      description: Workspace for application source code.
+    - name: gitops
+      description: Workspace for GitOps repository.
+    - name: git-credentials
+      description: Secret with GitHub credentials for pushing to the GitOps repo.

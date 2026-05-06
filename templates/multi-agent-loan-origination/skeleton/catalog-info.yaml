@@ -1,0 +1,49 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  description: ${{ values.description }}
+  annotations:
+    github.com/project-slug: ${{ values.destination.owner + "/" + values.destination.repo }}
+    backstage.io/kubernetes-namespace: ${{ values.namespace }}
+    backstage.io/kubernetes-id: ${{ values.name }}
+    backstage.io/kubernetes-label-selector: backstage.io/kubernetes-id=${{ values.name }}
+    janus-idp.io/tekton: ${{ values.name }}
+    argocd/app-name: ${{ values.name }}
+  links:
+    - url: https://devspaces.${{ values.clusterDomain }}/#https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}
+      title: Open in Dev Spaces
+      icon: code
+spec:
+  type: service
+  lifecycle: production
+  owner: ${{ values.owner }}
+  dependsOn:
+    - resource:default/${{ values.name }}-gitops
+  providesApis:
+    - ${{ values.name }}-api
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{ values.name }}-api
+  description: REST and WebSocket API for ${{ values.name }}
+spec:
+  type: openapi
+  lifecycle: production
+  owner: ${{ values.owner }}
+  definition: |
+    openapi: "3.0.0"
+    info:
+      title: ${{ values.name }} API
+      version: "1.0.0"
+    paths:
+      /health/:
+        get:
+          summary: Health check
+      /api/applications:
+        get:
+          summary: List loan applications
+      /api/chat:
+        get:
+          summary: Public assistant WebSocket

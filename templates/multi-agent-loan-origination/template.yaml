@@ -1,0 +1,287 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: deploy-multi-agent-loan-origination
+  title: Multi-Agent Loan Origination System
+  description: >
+    Deploy a multi-agent AI loan origination system on OpenShift.
+    Creates a GitOps repo with Helm values and ArgoCD configuration,
+    forks the application source, wires Tekton CI, and registers
+    everything in the Backstage catalog with K8s, CI, and CD tab visibility.
+  tags:
+    - ai
+    - multi-agent
+    - langraph
+    - openshift
+    - helm
+    - tekton
+    - argocd
+    - gitops
+    - python
+    - react
+    - fastapi
+    - mortgage
+spec:
+  owner: platform-engineering
+  type: service
+
+  parameters:
+    # ── Page 1: Service Details ────────────────────────────────────────
+    - title: Service Details
+      required:
+        - name
+      properties:
+        name:
+          title: Instance Name
+          type: string
+          description: >
+            Unique name for this deployment instance (kebab-case).
+            Used as the Helm release name, namespace prefix, and catalog ID.
+          maxLength: 50
+          pattern: '^([a-zA-Z][a-zA-Z0-9]*)(-[a-zA-Z0-9]+)*$'
+          ui:autofocus: true
+        description:
+          title: Description
+          type: string
+          description: Short description of this deployment instance.
+          default: Multi-agent AI loan origination system on OpenShift
+        owner:
+          title: Owner
+          type: string
+          description: Backstage entity that owns this component.
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: [Group, User]
+        companyName:
+          title: Company Name
+          type: string
+          description: Display name shown in the UI header.
+          default: Red Hat AI Quickstart Demo
+
+    # ── Page 2: LLM Configuration ─────────────────────────────────────
+    - title: LLM Configuration
+      properties:
+        llmBaseUrl:
+          title: LLM Base URL
+          type: string
+          description: OpenAI-compatible LLM endpoint URL.
+          default: http://vllm:8000/v1
+        llmModel:
+          title: LLM Model
+          type: string
+          description: Model name for the LLM endpoint.
+          default: gpt-4o-mini
+        llmApiKey:
+          title: LLM API Key
+          type: string
+          description: API key for the LLM endpoint (use "not-needed" for local).
+          default: not-needed
+          ui:widget: password
+        visionModel:
+          title: Vision Model (optional)
+          type: string
+          description: Model for document image extraction. Leave empty to use main LLM.
+          default: ""
+        visionBaseUrl:
+          title: Vision Base URL (optional)
+          type: string
+          description: Endpoint for vision model. Leave empty to use main LLM endpoint.
+          default: ""
+        embeddingProvider:
+          title: Embedding Provider
+          type: string
+          description: >
+            Leave empty for built-in local embeddings (sentence-transformers).
+            Set to "openai_compatible" for a remote embedding service.
+          default: ""
+          enum:
+            - ""
+            - openai_compatible
+          enumNames:
+            - Local (sentence-transformers)
+            - OpenAI-compatible remote
+
+    # ── Page 3: Deployment Configuration ──────────────────────────────
+    - title: Deployment Configuration
+      required:
+        - repoUrl
+      properties:
+        namespace:
+          title: OpenShift Namespace
+          type: string
+          description: Target namespace for the deployment.
+          default: loan-origination
+        clusterDomain:
+          title: Cluster Domain
+          type: string
+          description: >
+            OpenShift cluster apps domain (e.g. apps.ocp.example.com).
+            Used for Routes and webhook URLs.
+          default: apps.ocp.example.com
+        imageRegistry:
+          title: Image Registry
+          type: string
+          description: Container image registry.
+          default: quay.io
+        imageRepository:
+          title: Image Repository
+          type: string
+          description: Registry namespace / organization for images.
+          default: rh-ai-quickstart
+        imageTag:
+          title: Image Tag
+          type: string
+          description: Tag for the API and UI container images.
+          default: latest
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+            allowedOwners:
+              - <GITHUB_ORG>
+        enableKeycloak:
+          title: Enable Keycloak (OIDC auth)
+          type: boolean
+          description: Deploy Keycloak for authentication. Disable for demo/dev.
+          default: true
+        enableSeedData:
+          title: Seed Demo Data
+          type: boolean
+          description: Run post-deploy seed job with sample loan applications.
+          default: false
+        enableMLflow:
+          title: Enable MLflow Observability
+          type: boolean
+          description: Create RBAC resources for MLflow agent tracing.
+          default: false
+        authDisabled:
+          title: Disable Authentication (dev mode)
+          type: boolean
+          description: Set AUTH_DISABLED=true for development without Keycloak.
+          default: false
+
+  steps:
+    # ── Step 1: Generate app repo content (catalog-info.yaml) ─────────
+    - id: generateSource
+      name: Generate Application Catalog Entry
+      action: fetch:template
+      input:
+        url: ./skeleton
+        targetPath: ./source
+        values:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          namespace: ${{ parameters.namespace }}
+          clusterDomain: ${{ parameters.clusterDomain }}
+          destination: ${{ parameters.repoUrl | parseRepoUrl }}
+
+    # ── Step 2: Publish the application source repo ───────────────────
+    - id: publishSource
+      name: Create Application Repository
+      action: publish:github
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+        sourcePath: ./source
+        description: "${{ parameters.name }} - Multi-agent loan origination system"
+        repoVisibility: public
+        protectDefaultBranch: false
+
+    # ── Step 3: Generate GitOps repo content ──────────────────────────
+    - id: generateGitOps
+      name: Generate GitOps Manifests
+      action: fetch:template
+      input:
+        url: ./skeleton-gitops
+        targetPath: ./gitops
+        values:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          namespace: ${{ parameters.namespace }}
+          clusterDomain: ${{ parameters.clusterDomain }}
+          imageRegistry: ${{ parameters.imageRegistry }}
+          imageRepository: ${{ parameters.imageRepository }}
+          imageTag: ${{ parameters.imageTag }}
+          llmBaseUrl: ${{ parameters.llmBaseUrl }}
+          llmModel: ${{ parameters.llmModel }}
+          llmApiKey: ${{ parameters.llmApiKey }}
+          visionModel: ${{ parameters.visionModel }}
+          visionBaseUrl: ${{ parameters.visionBaseUrl }}
+          embeddingProvider: ${{ parameters.embeddingProvider }}
+          companyName: ${{ parameters.companyName }}
+          enableKeycloak: ${{ parameters.enableKeycloak }}
+          enableSeedData: ${{ parameters.enableSeedData }}
+          enableMLflow: ${{ parameters.enableMLflow }}
+          authDisabled: ${{ parameters.authDisabled }}
+          destination: ${{ parameters.repoUrl | parseRepoUrl }}
+
+    # ── Step 4: Publish the GitOps repo ───────────────────────────────
+    - id: publishGitOps
+      name: Create GitOps Repository
+      action: publish:github
+      input:
+        repoUrl: github.com?owner=${{ (parameters.repoUrl | parseRepoUrl).owner }}&repo=${{ (parameters.repoUrl | parseRepoUrl).repo }}-gitops
+        defaultBranch: main
+        sourcePath: ./gitops
+        description: "GitOps manifests for ${{ parameters.name }}"
+        repoVisibility: public
+        protectDefaultBranch: false
+
+    # ── Step 5: Wire CI webhook to Tekton EventListener ───────────────
+    - id: createWebhook
+      name: Configure CI Webhook
+      action: github:webhook
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        webhookUrl: https://el-loan-origination-listener-${{ parameters.namespace }}.${{ parameters.clusterDomain }}
+        contentType: json
+        events:
+          - push
+        webhookSecret: pac-webhook-shared-secret
+
+    # ── Step 6: Create ArgoCD Application ─────────────────────────────
+    - id: createArgoApp
+      name: Create ArgoCD Application
+      action: argocd:create-resources
+      input:
+        appName: ${{ parameters.name }}
+        argoInstance: openshift-gitops
+        namespace: ${{ parameters.namespace }}
+        repoUrl: ${{ steps.publishGitOps.output.remoteUrl }}
+        path: manifests
+        labelValue: ${{ parameters.name }}
+
+    # ── Step 7: Register application component in catalog ─────────────
+    - id: registerCatalog
+      name: Register Component in Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publishSource.output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+
+    # ── Step 8: Register GitOps resource in catalog ───────────────────
+    - id: registerGitOps
+      name: Register GitOps Resource in Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publishGitOps.output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+
+  output:
+    links:
+      - title: Application Repository
+        url: ${{ steps.publishSource.output.remoteUrl }}
+      - title: GitOps Repository
+        url: ${{ steps.publishGitOps.output.remoteUrl }}
+      - title: Open in Dev Spaces
+        icon: code
+        url: https://devspaces.${{ parameters.clusterDomain }}/#${{ steps.publishSource.output.remoteUrl }}
+      - title: View in Catalog
+        icon: catalog
+        entityRef: ${{ steps.registerCatalog.output.entityRef }}
