@@ -257,22 +257,7 @@ spec:
           - push
         webhookSecret: pac-webhook-shared-secret
 
-    # ── Step 7: Create ArgoCD Application ─────────────────────────────
-    # Points to the Helm chart in the SOURCE repo (deploy/helm/mortgage-ai).
-    # Uses default chart values initially. For custom values from the GitOps
-    # repo, apply the multi-source argocd-app.yaml from the GitOps repo.
-    - id: createArgoApp
-      name: Create ArgoCD Application
-      action: argocd:create-resources
-      input:
-        appName: ${{ parameters.name }}
-        argoInstance: openshift-gitops
-        namespace: ${{ parameters.namespace }}
-        repoUrl: ${{ steps.publishSource.output.remoteUrl }}
-        path: deploy/helm/mortgage-ai
-        labelValue: ${{ parameters.name }}
-
-    # ── Step 8: Register application component in catalog ─────────────
+    # ── Step 7: Register application component in catalog ──────────────
     - id: registerCatalog
       name: Register Component in Catalog
       action: catalog:register
@@ -280,7 +265,7 @@ spec:
         repoContentsUrl: ${{ steps.publishSource.output.repoContentsUrl }}
         catalogInfoPath: /catalog-info.yaml
 
-    # ── Step 9: Register GitOps resource in catalog ───────────────────
+    # ── Step 8: Register GitOps resource in catalog ────────────────────
     - id: registerGitOps
       name: Register GitOps Resource in Catalog
       action: catalog:register
@@ -289,6 +274,15 @@ spec:
         catalogInfoPath: /catalog-info.yaml
 
   output:
+    text:
+      - title: Deploy to OpenShift
+        content: |
+          Clone the GitOps repo and apply the ArgoCD Application:
+          ```
+          git clone ${{ steps.publishGitOps.output.remoteUrl }}
+          cd ${{ (parameters.repoUrl | parseRepoUrl).repo }}-gitops
+          oc apply -f manifests/argocd-app.yaml
+          ```
     links:
       - title: Application Repository
         url: ${{ steps.publishSource.output.remoteUrl }}
