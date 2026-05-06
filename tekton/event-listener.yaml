@@ -2,7 +2,7 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: EventListener
 metadata:
   name: loan-origination-listener
-  namespace: loan-origination
+  namespace: loan-origination-ci
 spec:
   serviceAccountName: pipeline
   triggers:

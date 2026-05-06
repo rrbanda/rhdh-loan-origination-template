@@ -2,7 +2,7 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: TriggerTemplate
 metadata:
   name: loan-origination-deploy-template
-  namespace: loan-origination
+  namespace: loan-origination-ci
 spec:
   params:
     - name: git-url
@@ -13,7 +13,7 @@ spec:
       kind: PipelineRun
       metadata:
         generateName: $(tt.params.repo-name)-run-
-        namespace: loan-origination
+        namespace: loan-origination-ci
         labels:
           app: $(tt.params.repo-name)
           backstage.io/kubernetes-id: $(tt.params.repo-name)
@@ -29,7 +29,7 @@ spec:
           - name: repo-name
             value: $(tt.params.repo-name)
           - name: deploy-namespace
-            value: loan-origination
+            value: loan-origination-demo
           - name: gitops-repo-url
             value: https://github.com/rrbanda/$(tt.params.repo-name)-gitops.git
         workspaces:

@@ -2,7 +2,8 @@ apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: loan-origination-ci
-  namespace: loan-origination
+  # Deploy into your chosen namespace -- update to match your target namespace
+  namespace: loan-origination-ci
 spec:
   description: >
     CI pipeline for the multi-agent loan origination system.

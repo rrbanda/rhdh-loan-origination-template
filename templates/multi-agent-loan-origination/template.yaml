@@ -110,8 +110,10 @@ spec:
         namespace:
           title: OpenShift Namespace
           type: string
-          description: Target namespace for the deployment.
-          default: loan-origination
+          description: >
+            Target namespace for the deployment. Each instance gets its
+            own namespace to avoid conflicts with existing deployments.
+          default: loan-origination-demo
         clusterDomain:
           title: Cluster Domain
           type: string
@@ -248,7 +250,7 @@ spec:
       action: github:webhook
       input:
         repoUrl: ${{ parameters.repoUrl }}
-        webhookUrl: https://el-loan-origination-listener-${{ parameters.namespace }}.${{ parameters.clusterDomain }}
+        webhookUrl: https://el-loan-origination-listener-loan-origination-ci.${{ parameters.clusterDomain }}
         contentType: json
         events:
           - push

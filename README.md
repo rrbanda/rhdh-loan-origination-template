@@ -122,25 +122,29 @@ You also need a GitHub account with a personal access token that has
 
 ## Installation Guide
 
-### 1. Create the target namespace
+### 1. Create the CI namespace (separate from deployment namespace)
+
+The Tekton pipeline infrastructure runs in its own namespace (`loan-origination-ci`)
+so it does not interfere with application deployments. Each template run
+creates a fresh application namespace (default: `loan-origination-demo`).
 
 ```bash
-oc new-project loan-origination
+oc new-project loan-origination-ci
 ```
 
 ### 2. Create RBAC for the pipeline service account
 
 ```bash
 oc adm policy add-role-to-user edit \
-  system:serviceaccount:loan-origination:pipeline -n loan-origination
+  system:serviceaccount:loan-origination-ci:pipeline -n loan-origination-ci
 oc adm policy add-role-to-user system:image-builder \
-  system:serviceaccount:loan-origination:pipeline -n loan-origination
+  system:serviceaccount:loan-origination-ci:pipeline -n loan-origination-ci
 ```
 
 ### 3. Create the shared Tekton Pipeline
 
 ```bash
-oc apply -f tekton/pipeline.yaml -n loan-origination
+oc apply -f tekton/pipeline.yaml -n loan-origination-ci
 ```
 
 ### 4. Create the GitHub webhook secret
@@ -148,7 +152,7 @@ oc apply -f tekton/pipeline.yaml -n loan-origination
 ```bash
 oc create secret generic github-webhook-secret \
   --from-literal=webhook-secret=pac-webhook-shared-secret \
-  -n loan-origination
+  -n loan-origination-ci
 ```
 
 ### 5. Create the GitHub basic-auth secret for GitOps pushes
@@ -158,19 +162,19 @@ oc create secret generic github-basic-auth \
   --type=kubernetes.io/basic-auth \
   --from-literal=username=<GITHUB_USERNAME> \
   --from-literal=password=<GITHUB_TOKEN> \
-  -n loan-origination
+  -n loan-origination-ci
 
 oc annotate secret github-basic-auth \
   "tekton.dev/git-0=https://github.com" \
-  -n loan-origination
+  -n loan-origination-ci
 ```
 
 ### 6. Create the Tekton Triggers
 
 ```bash
-oc apply -f tekton/trigger-binding.yaml -n loan-origination
-oc apply -f tekton/trigger-template.yaml -n loan-origination
-oc apply -f tekton/event-listener.yaml -n loan-origination
+oc apply -f tekton/trigger-binding.yaml -n loan-origination-ci
+oc apply -f tekton/trigger-template.yaml -n loan-origination-ci
+oc apply -f tekton/event-listener.yaml -n loan-origination-ci
 ```
 
 ### 7. Expose the EventListener
@@ -179,14 +183,14 @@ oc apply -f tekton/event-listener.yaml -n loan-origination
 oc create route edge el-loan-origination-listener \
   --service=el-loan-origination-listener \
   --insecure-policy=Redirect \
-  -n loan-origination
+  -n loan-origination-ci
 ```
 
 Verify the webhook URL:
 
 ```bash
 WEBHOOK_URL=$(oc get route el-loan-origination-listener \
-  -n loan-origination -o jsonpath='{.spec.host}')
+  -n loan-origination-ci -o jsonpath='{.spec.host}')
 echo "Webhook URL: https://$WEBHOOK_URL"
 ```
 

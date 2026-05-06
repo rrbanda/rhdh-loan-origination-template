@@ -2,7 +2,7 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: TriggerBinding
 metadata:
   name: loan-origination-push-binding
-  namespace: loan-origination
+  namespace: loan-origination-ci
 spec:
   params:
     - name: git-url
