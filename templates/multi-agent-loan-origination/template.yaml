@@ -21,6 +21,7 @@ metadata:
     - react
     - fastapi
     - mortgage
+    - kagenti-agent
 spec:
   owner: platform-engineering
   type: service
