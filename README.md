@@ -159,9 +159,10 @@ oc create secret generic github-webhook-secret \
 
 ```bash
 oc create secret generic github-basic-auth \
-  --type=kubernetes.io/basic-auth \
-  --from-literal=username=<GITHUB_USERNAME> \
-  --from-literal=password=<GITHUB_TOKEN> \
+  --from-literal=.git-credentials="https://<GITHUB_USERNAME>:<GITHUB_TOKEN>@github.com" \
+  --from-literal=.gitconfig='[credential "https://github.com"]
+    helper = store
+' \
   -n loan-origination-ci
 
 oc annotate secret github-basic-auth \
