@@ -161,6 +161,11 @@ spec:
           type: boolean
           description: Create RBAC resources for MLflow agent tracing.
           default: false
+        enableKagenti:
+          title: Enable Kagenti A2A
+          type: boolean
+          description: Enable Kagenti agent-to-agent mesh with SPIRE identity and Envoy sidecar.
+          default: true
         authDisabled:
           title: Disable Authentication (dev mode)
           type: boolean
@@ -229,6 +234,7 @@ spec:
           enableKeycloak: ${{ parameters.enableKeycloak }}
           enableSeedData: ${{ parameters.enableSeedData }}
           enableMLflow: ${{ parameters.enableMLflow }}
+          enableKagenti: ${{ parameters.enableKagenti }}
           authDisabled: ${{ parameters.authDisabled }}
           destination: ${{ parameters.repoUrl | parseRepoUrl }}
           sourceRepoUrl: ${{ steps.publishSource.output.remoteUrl }}

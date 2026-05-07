@@ -70,8 +70,8 @@ secrets:
   MLFLOW_TRACKING_INSECURE_TLS: "false"
 
   # Kagenti
-  KAGENTI_ENABLED: "false"
-  KAGENTI_SERVICE_NAME: ""
+  KAGENTI_ENABLED: "${{ values.enableKagenti }}"
+  KAGENTI_SERVICE_NAME: "${{ values.name }}-api"
 
   # Admin
   SQLADMIN_USER: "admin"
@@ -207,7 +207,10 @@ nemoGuardrails:
   enabled: false
 
 kagenti:
-  enabled: false
+  enabled: ${{ values.enableKagenti }}
+  a2aBasePort: 8080
+  inboundPortsExclude: "8000"
+  outboundPortsExclude: "5432,9000,8081"
 
 # Seed data
 seed:
