@@ -57,9 +57,11 @@ spec:
         - name: DOCKERFILE
           value: packages/api/Containerfile
         - name: CONTEXT
-          value: .
+          value: $(workspaces.source.path)
         - name: TLS_VERIFY
           value: "false"
+        - name: VERBOSE
+          value: "true"
       taskRef:
         resolver: cluster
         params:
@@ -83,9 +85,11 @@ spec:
         - name: DOCKERFILE
           value: packages/ui/Containerfile
         - name: CONTEXT
-          value: .
+          value: $(workspaces.source.path)
         - name: TLS_VERIFY
           value: "false"
+        - name: VERBOSE
+          value: "true"
       taskRef:
         resolver: cluster
         params:
