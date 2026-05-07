@@ -71,6 +71,7 @@ secrets:
 
   # Kagenti
   KAGENTI_ENABLED: "false"
+  KAGENTI_SERVICE_NAME: ""
 
   # Admin
   SQLADMIN_USER: "admin"

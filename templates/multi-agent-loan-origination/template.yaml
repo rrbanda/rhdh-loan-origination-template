@@ -257,7 +257,19 @@ spec:
           - push
         webhookSecret: pac-webhook-shared-secret
 
-    # ── Step 7: Register application component in catalog ──────────────
+    # ── Step 7: Create ArgoCD Application ─────────────────────────────
+    - id: createArgoApp
+      name: Create ArgoCD Application
+      action: argocd:create-resources
+      input:
+        appName: ${{ parameters.name }}
+        argoInstance: openshift-gitops
+        namespace: ${{ parameters.namespace }}
+        repoUrl: ${{ steps.publishSource.output.remoteUrl }}
+        path: deploy/helm/mortgage-ai
+        labelValue: ${{ parameters.name }}
+
+    # ── Step 8: Register application component in catalog ─────────────
     - id: registerCatalog
       name: Register Component in Catalog
       action: catalog:register
@@ -265,7 +277,7 @@ spec:
         repoContentsUrl: ${{ steps.publishSource.output.repoContentsUrl }}
         catalogInfoPath: /catalog-info.yaml
 
-    # ── Step 8: Register GitOps resource in catalog ────────────────────
+    # ── Step 9: Register GitOps resource in catalog ────────────────────
     - id: registerGitOps
       name: Register GitOps Resource in Catalog
       action: catalog:register
