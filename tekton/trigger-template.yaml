@@ -19,6 +19,10 @@ spec:
           backstage.io/kubernetes-id: $(tt.params.repo-name)
           tekton.dev/pipeline: loan-origination-ci
       spec:
+        taskRunTemplate:
+          podTemplate:
+            securityContext:
+              fsGroup: 65532
         pipelineRef:
           name: loan-origination-ci
         params:
