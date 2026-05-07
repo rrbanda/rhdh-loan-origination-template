@@ -75,9 +75,9 @@ spec:
         - name: source
           workspace: source
 
-    # ── Build + push UI image ─────────────────────────────────────────
+    # ── Build + push UI image (sequential -- RWO PVC can't be shared) ─
     - name: build-ui
-      runAfter: [clone]
+      runAfter: [build-api]
       params:
         - name: IMAGE
           value: >-
